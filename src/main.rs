@@ -111,7 +111,9 @@ fn preprocess(instructions: &mut Vec<Instruction>, buffer: &String) {
                 instructions[dest] = Instruction::OpLstart {
                     destination: instructions.len(),
                 };
-                instructions.push(Instruction::OpLend { destination: dest + 1 });
+                instructions.push(Instruction::OpLend {
+                    destination: dest + 1,
+                });
             }
             _ => continue, // comments or newline
         }
