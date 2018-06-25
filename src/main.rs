@@ -57,14 +57,14 @@ struct Cli {
 }
 
 enum Instruction {
-    OpVinc { quantity: usize },
-    OpVdec { quantity: usize },
-    OpPinc { quantity: usize },
-    OpPdec { quantity: usize },
-    OpIn { quantity: usize },
-    OpOut { quantity: usize },
-    OpLstart { destination: usize },
-    OpLend { destination: usize },
+    OpVinc { quantity: usize }, // +
+    OpVdec { quantity: usize }, // -
+    OpPinc { quantity: usize }, // >
+    OpPdec { quantity: usize }, // <
+    OpIn { quantity: usize }, // , FIXME: not implemented
+    OpOut { quantity: usize }, // .
+    OpLstart { destination: usize }, // [
+    OpLend { destination: usize }, // ]
 }
 
 impl Instruction {
