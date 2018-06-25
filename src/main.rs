@@ -3,7 +3,6 @@ extern crate quicli;
 use quicli::prelude::*;
 use std::io;
 use std::io::Read;
-use std::process::exit;
 
 #[derive(Debug, StructOpt)]
 struct Cli {
@@ -57,74 +56,79 @@ struct Cli {
     verbosity: Verbosity,
 }
 
-#[derive(Debug, PartialEq)]
-enum InstructionType {
-    EndError,
-    EndIgnore,
-    EndWrap,
-    OpVinc,
-    OpVdec,
-    OpPinc,
-    OpPdec,
-    OpLstart,
-    OpLend,
-    OpIn,
-    OpOut,
-    EofZero,
-    EofMin,
-    EofMax,
-    EofNegone,
-    EofNochg,
+enum Instruction {
+    OpVinc { quantity: usize },
+    OpVdec { quantity: usize },
+    OpPinc { quantity: usize },
+    OpPdec { quantity: usize },
+    OpIn { quantity: usize },
+    OpOut { quantity: usize },
+    OpLstart { destination: usize },
+    OpLend { destination: usize },
 }
 
-#[derive(Debug)]
-struct Instruction {
-    /// instruction type
-    instruction: InstructionType,
-    /// number of times to run the instruction
-    quantity: usize,
-    /// index of the loop's matching other instruction
-    loopi: usize,
+impl Instruction {
+    fn inc(&mut self) {
+        match self {
+            Instruction::OpVinc { quantity }
+            | Instruction::OpVdec { quantity }
+            | Instruction::OpPinc { quantity }
+            | Instruction::OpPdec { quantity }
+            | Instruction::OpIn { quantity }
+            | Instruction::OpOut { quantity } => {
+                *quantity += 1;
+            }
+            _ => (),
+        }
+    }
+}
+
+// https://stackoverflow.com/a/32554326/4376737
+fn variant_eq<T>(a: &T, b: &T) -> bool {
+    std::mem::discriminant(a) == std::mem::discriminant(b)
 }
 
 fn preprocess(instructions: &mut Vec<Instruction>, buffer: &String) {
     let mut index = 0;
+    let mut stack: Vec<usize> = Vec::new();
     for c in buffer.chars() {
         match c {
-            '+' => instructions.push(Instruction {
-                instruction: InstructionType::OpVinc,
-                quantity: 1,
-                loopi: 0,
-            }),
-            '-' => instructions.push(Instruction {
-                instruction: InstructionType::OpVdec,
-                quantity: 1,
-                loopi: 0,
-            }),
-            '>' => instructions.push(Instruction {
-                instruction: InstructionType::OpPinc,
-                quantity: 1,
-                loopi: 0,
-            }),
-            '<' => instructions.push(Instruction {
-                instruction: InstructionType::OpPdec,
-                quantity: 1,
-                loopi: 0,
-            }),
-            '\n' => continue,
-            _ => exit(1),
+            // FIXME: Wrap
+            '+' => instructions.push(Instruction::OpVinc { quantity: 1 }),
+            '-' => instructions.push(Instruction::OpVdec { quantity: 1 }),
+            '>' => instructions.push(Instruction::OpPinc { quantity: 1 }),
+            '<' => instructions.push(Instruction::OpPdec { quantity: 1 }),
+            '.' => instructions.push(Instruction::OpOut { quantity: 1 }),
+            '[' => {
+                stack.push(instructions.len());
+                instructions.push(Instruction::OpLstart { destination: 0 });
+            }
+            ']' => {
+                let dest = match stack.pop() {
+                    Some(dest) => dest,
+                    _ => panic!("Unmatched ] operator"),
+                };
+                instructions[dest] = Instruction::OpLstart {
+                    destination: instructions.len(),
+                };
+                instructions.push(Instruction::OpLend { destination: dest + 1 });
+            }
+            _ => continue, // comments or newline
         }
         if index > 0 {
             // group nearby together
-            if instructions[index - 1].instruction == instructions[index].instruction {
+            if variant_eq(&instructions[index - 1], &instructions[index]) {
                 instructions.pop(); // remove the newest
-                instructions[index - 1].quantity += 1;
+                instructions[index - 1].inc();
             } else {
                 index += 1;
             }
         } else {
             index += 1;
         }
+    }
+    if stack.len() > 0 {
+        panic!("Not enough ] operators!");
     }
 }
 
@@ -140,11 +144,20 @@ fn execute(
     let instruction = &instructions[instruction_index];
     let mut next_iindex = instruction_index + 1;
     let mut next_cindex = cell_index;
-    match instruction.instruction {
-        InstructionType::OpVinc => cells[cell_index] += instruction.quantity as u8,
-        InstructionType::OpVdec => cells[cell_index] -= instruction.quantity as u8,
-        InstructionType::OpPinc => next_cindex += instruction.quantity,
-        InstructionType::OpPdec => next_cindex -= instruction.quantity,
+    match instruction {
+        Instruction::OpVinc { quantity } => cells[cell_index] += *quantity as u8,
+        Instruction::OpVdec { quantity } => cells[cell_index] -= *quantity as u8,
+        Instruction::OpPinc { quantity } => next_cindex += *quantity,
+        Instruction::OpPdec { quantity } => next_cindex -= *quantity,
+        Instruction::OpOut { quantity } => for _ in 0..*quantity {
+            print!("{}", cells[cell_index] as char)
+        },
+        Instruction::OpLstart { destination } => if cells[cell_index] == 0 {
+            next_iindex = *destination;
+        },
+        Instruction::OpLend { destination } => if cells[cell_index] > 0 {
+            next_iindex = *destination;
+        },
         _ => (),
     }
 
@@ -166,7 +179,4 @@ main!(|args: Cli, log_level: verbosity| {
     // println!("{:?}", instructions);
     let mut cells: Vec<u8> = vec![0; args.cells];
     execute(&mut instructions, &mut cells, 0, 0);
-
-    println!("finished!");
-    println!("{:?}", cells);
 });
