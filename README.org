@@ -2,7 +2,7 @@
 
 A brainfuck interpreter written in rust. This could probably be in a functional
 language instead, considering the main loop is recursive. It's only missing one
-operation, and that's the ~,~ operation.
+operation, and that's the =,= operation.
 
 Build with 
 #+BEGIN_SRC shell
